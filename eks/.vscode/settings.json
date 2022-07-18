@@ -1,0 +1,5 @@
+{
+  "yaml.schemas": {
+    "cloudformation://schema/cloudformation": "file:///c%3A/workspace/aws/cloudformation/eks/eks-cluster.yaml"
+  }
+}

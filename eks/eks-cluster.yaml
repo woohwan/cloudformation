@@ -1,0 +1,496 @@
+--- 
+# This Cloudformation template will creae following modules
+# VPC, 2-public subnest, InternetGateway, 2 private subnets
+# EKS ckuster with One node group
+
+# StackName : eks-cluster
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: EKS cluster using a VPC with two public subnets
+
+Parameters:
+  EKSClusterName:
+    Type: String
+    Description: Name of k8s cluster
+    Default: eks-cluster
+
+  NumWorkerNodes:
+    Type: Number
+    Description: Number of worker nodes to create
+    Default: 2
+  
+  WorkerNodesInstanceType:
+    Type: String
+    Description: EC2 instance type for the worker nodes
+    Default: t3.medium
+
+  NodeVolumeSize:
+    Type: Number
+    Default: 20
+    Description: Node volume size  
+
+  KeyPairName:
+    Type: String
+    Description: Name of an existing EC2 key pair (for SSH access to the worker node instance)
+    Default: aws-ec2
+  
+  BootstrapArguments:
+    Type: String
+    Default: ""
+    Description: "Arguments to pass to the bootstrap script. See files/bootstrap.sh in https://github.com/awslabs/amazon-eks-ami"
+
+  NodeAutoScalingGroupDesiredCapacity:
+    Type: Number
+    Default: 2
+    Description: Desired capacity of Node Group ASG.
+
+  NodeAutoScalingGroupMaxSize:
+    Type: Number
+    Default: 3
+    Description: Maximum size of Node Group ASG. Set to at least 1 greater than NodeAutoScalingGroupDesiredCapacity.
+
+  NodeAutoScalingGroupMinSize:
+    Type: Number
+    Default: 1
+    Description: Minimum size of Node Group ASG.
+
+  NodeGroupName:
+    Type: String
+    Description: Unique identifier for the Node Group.
+
+Mappings:
+  VpcIpRange:
+    Option1:
+      VPC: 10.100.0.0/16
+      PublicSubnet1: 10.100.0.0/18
+      PublicSubnet2: 10.100.64.0/18
+      PrivateSubnet1: 10.100.128.0/18
+      PrivateSubnet2: 10.100.192.0/18
+  # IDs of the "EKS-optimised AMIs" for the worker nodes:
+  # https://docs.aws.amazon.com/eks/latest/userguide/eks-optimized-ami.html
+  # IMPORTANT NOTE: Choose AWS EKS compatible ami IDs only
+  EksAmiIds:
+    ap-northeast-2:
+      Standard: ami-06270d127b7771d04  # Amazon Linux 2 Kernel 5.10 AMI
+
+Resources:
+#==========================================================================================#
+# VPC
+#==========================================================================================#
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !FindInMap [ VpcIpRange, Option1, VPC ]
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Ref AWS::StackName
+  
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: !FindInMap [ VpcIpRange, Option1, PublicSubnet1 ]
+      VpcId:   !Ref VPC
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-PublicSubnet1"
+        - Key: kubernetes.io.role/elb
+          Value: 1
+        # not need more over k8s v1.19
+        #- Key: !Sub "kubernetes.io/cluster/${AWS::StackName}" 
+        #  Value: shared
+  
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      VpcId: !Ref VPC
+      CidrBlock: !FindInMap [ VpcIpRange, Option1, PublicSubnet2 ]
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-PublicSubnet2"
+        - Key: kubernetes.io.role/elb
+          Value: 1
+  
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      VpcId: !Ref VPC
+      CidrBlock: !FindInMap [ VpcIpRange, Option1, PrivateSubnet1 ]
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-PrivateSubnet1"
+        - Key: kubernetes.io/role/internal-elb
+          Value: 1
+  
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [ 1, !GetAZs '']
+      VpcId: !Ref VPC
+      CidrBlock: !FindInMap [ VpcIpRange, Option1, PrivateSubnet2 ]
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-PrivateSubnet2"
+        - Key: kubernetes.io/role/insternal-elb
+          Value: 1
+
+  # Internet Gateway
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Ref AWS::StackName
+  
+  # Attach Internet Gateway to VPC
+  VPCGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref VPC
+
+  # RouteTable for Public Subnets
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-PublicSubnets"
+
+  # Attach route table to Route
+  InternetGatewayRoute:
+    Type: AWS::EC2::Route
+    # DependsOn is mandatory because route targets InternetGateway
+    # See here: https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-attribute-dependson.html#gatewayattachment
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+  
+  # create elastic ip to attache to NatGateway
+  NatGateway1EIP:
+    Type: AWS::EC2::EIP
+    DependsOn:
+      - VPCGatewayAttachment
+    Properties:
+      Domain: vpc
+
+  NatGateway2EIP:
+    Type: AWS::EC2::EIP
+    DependsOn:
+      - VPCGatewayAttachment
+    Properties:
+      Domain: "vpc"
+  
+  NatGateway1:
+    Type: AWS::EC2::NatGateway
+    DependsOn:
+      - NatGateway1EIP
+      - PublicSubnet1
+    Properties:
+      AllocationId: !GetAtt  NatGateway1EIP.AllocationId
+      SubnetId: !Ref PublicSubnet1 # Required
+
+  NatGateway2:
+    Type: AWS::EC2::NatGateway
+    DependsOn:
+      - NatGateway2EIP
+      - PublicSubnet2
+    Properties:
+      AllocationId: !GetAtt NatGateway2EIP.AllocationId
+      SubnetId: !Ref PublicSubnet2 # Required
+
+  # create route table to attache to router
+  PrivateRouteTable1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub  ${AWS::StackName} Private Routes (AZ1)
+
+  PrivateRoute1:
+    Type: AWS::EC2::Route
+    DependsOn:
+      - VPCGatewayAttachment
+      - NatGateway1
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable1
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway1
+
+  PrivateRouteTable2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub  ${AWS::StackName} Private Routes (AZ2)
+  
+  PrivateRoute2:
+    Type: AWS::EC2::Route
+    DependsOn:
+      - VPCGatewayAttachment
+      - NatGateway2
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable2
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway2
+
+  # connect router to subnet
+  PublicSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable # Required
+      SubnetId: !Ref PublicSubnet1 # Required
+
+  PublicSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable # Required
+      SubnetId: !Ref PublicSubnet2 # Required
+    
+  PrivateSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable1 # Required
+      SubnetId: !Ref PrivateSubnet1 # Required
+
+  PrivateSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable2 # Required
+      SubnetId: !Ref PrivateSubnet2 # Required
+
+#==========================================================================================#
+# Control Plane
+#==========================================================================================#
+  ControlPlane:
+    Type: AWS::EKS::Cluster
+    Properties:
+      Name: !Ref AWS::StackName
+      Version: "1.22"
+      RoleArn: !GetAtt ControlPlaneRole.Arn
+      ResourcesVpcConfig:
+        SecurityGroupIds:
+          - !Ref ControlPlaneSecurityGroup
+        SubnetIds:
+          - !Ref PrivateSubnet1
+          - !Ref PrivateSubnet2
+
+  ControlPlaneRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument: 
+        Version: '2012-10-17'
+        Statement:
+          Effect: Allow
+          Principal:
+            Service:
+              - eks.amazonaws.com
+          Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+        - arn:aws:iam::aws:policy/AmazonEKSServicePolicy
+      RoleName: !Sub '${AWS::StackName}-ControlPlaneRole'
+
+#==========================================================================================#
+# Control Plane Security Group
+#==========================================================================================#
+  ControlPlaneSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for the elastic network interfaces between the control plane and the worker nodes
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-ControlPlaneSecurityGroup"
+
+  ControlPlaneIngressFromWorkerNodesHttps:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allow Incomming HTTPS traffic (TCP/443) from worker nodes (for API Server)
+      GroupId: !Ref ControlPlaneSecurityGroup
+      SourceSecurityGroupId: !Ref WorkerNodesSecurityGroup
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+
+  ControlPlaneEgressToWorkerNodesKublet:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      Description: Allow outgoing kublet traffic (TCP/10250) to worker nodes
+      GroupId: !Ref ControlPlaneSecurityGroup
+      DestinationSecurityGroupId: !Ref WorkerNodesSecurityGroup
+      IpProtocol: tcp
+      FromPort: 10250
+      ToPort: 10250
+
+  ControlPlaneEgressToWorkerNodesHttps:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      Description: Allow outgoing HTTPS traffic (TCP/443) to worker nodes ( for pods running extension API servers)
+      GroupId: !Ref ControlPlaneSecurityGroup
+      DestinationSecurityGroupId: !Ref WorkerNodesSecurityGroup
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+
+#==========================================================================================#
+# Worker nodes Security Group
+# Note: default egress rule (allow all traffic to all destination)
+#==========================================================================================#
+  WorkerNodesSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for all the worker nodes
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-WorkerNodesSecurityGroup"
+        - Key: !Sub "kuberntes.io/cluster/${EKSClusterName}"
+          Value: "owned"
+
+  WorkerNodesIngressFromWorkerNodes:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allow node to communicate with each other
+      GroupId: !Ref  WorkerNodesSecurityGroup
+      SourceSecurityGroupId: !Ref  WorkerNodesSecurityGroup
+      IpProtocol: -1
+      FromPort: 0
+      ToPort: 65535
+
+  WorkerNodesIngressFromControlPlaneKubelet:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allow incomming kublet traffic (TCP/10250) from control plane
+      GroupId: !Ref WorkerNodesSecurityGroup
+      SourceSecurityGroupId: !Ref ControlPlaneSecurityGroup
+      IpProtocol: tcp
+      FromPort: 10250
+      ToPort: 10250
+
+  WorkerNodesIngressFromControlPlaneHttps:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allow incoming HTTPS traffic (TCP/443) from control plane (for pods running extension API servers)
+      GroupId: !Ref WorkerNodesSecurityGroup
+      SourceSecurityGroupId: !Ref ControlPlaneSecurityGroup
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+
+  WorkerNodesIngressFromControlPlane:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allow worker Kubelets and pods to receive communication from the cluster control plane
+      GroupId: !Ref WorkerNodesSecurityGroup
+      SourceSecurityGroupId: !Ref ControlPlaneSecurityGroup
+      IpProtocol: tcp
+      FromPort: 1025
+      ToPort: 65535
+
+#============================================================================#
+# Worker nodes (Instance Role & Profile)
+#============================================================================#
+  NodeInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+
+  NodesInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref NodeInstanceRole
+
+#============================================================================#
+# Worker nodes Launch Template
+#============================================================================#
+  NodeLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        BlockDeviceMappings:
+          - DeviceName: /dev/xvda
+            Ebs:
+              DeleteOnTermination: true
+              VolumeSize: !Ref NodeVolumeSize
+              VolumeType: gp2
+        IamInstanceProfile:
+          Arn: !GetAtt NodesInstanceProfile.Arn
+        ImageId: !FindInMap
+          - EksAmiIds
+          - !Ref AWS::Region
+          - Standard
+        InstanceType: !Ref WorkerNodesInstanceType
+        KeyName: !Ref KeyPairName
+        SecurityGroups:
+          - !Ref WorkerNodesSecurityGroup
+        # IMPORTANT NOTE: This code bootstrap some cfn settings on our ec2 machine, it require some parameters like
+        # --stack <AWS::StackName>, --resource <NodeGroupName>, --region <AWS::region>
+        # /usr/bin/ping -c 5 google.com ( To ensure that our node have internet connectivity via NATGateway )
+        UserData:
+          Fn::Base64: !Sub |
+              #!/bin/bash
+              set -o xtrace
+              /etc/eks/bootstrap.sh ${EKSClusterName} ${BootstrapArguments}
+              /opt/aws/bin/cfn-signal \
+                              --exit-code $? \
+                              --stack  ${AWS::StackName} \
+                              --resource WorkerNodeGroup \
+                              --region ${AWS::Region}
+              /usr/bin/ping -c 5 google.com 
+        # MetadataOptions:
+        #   HttpPUtResponseHopLimit: 2
+        #   HttpEndpoint: enabled
+        #   HttpTokens: !If
+        #     - IMDSv1Disabled
+        #     - required
+        #     - optional
+
+#============================================================================#
+# Node Group (Auto Scaling)
+#============================================================================#
+  NodeGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      DesiredCapacity: !Ref NodeAutoScalingGroupDesiredCapacity
+      LaunchTemplate:
+        LaunchTemplateId: !Ref NodeLaunchTemplate
+        Version: !GetAtt NodeLaunchTemplate.LatestVersionNumber
+
+      MaxSize: !Ref NodeAutoScalingGroupMaxSize
+      MinSize: !Ref NodeAutoScalingGroupMinSize
+      Tags:
+        - Key: Name
+          PropagateAtLaunch: true
+          Value: !Sub ${EKSClusterName}-${NodeGroupName}-Node
+        - Key: !Sub kubernetes.io/cluster/${EKSClusterName}
+          PropagateAtLaunch: true
+          Value: owned
+      # A list of subnet IDs for a virtual private cloud (VPC) where instances in the Auto Scaling group can be created.
+      VPCZoneIdentifier: [ !Ref PrivateSubnet1, !Ref PrivateSubnet2 ]
+      # UpdatePolicy:
+      #   AutoScalingRollingUpdate:
+      #     MaxBatchSize: 1
+      #     MinInstancesInService: !Ref NodeAutoScalingGroupDesiredCapacity
+      #     PauseTime: PT5M
