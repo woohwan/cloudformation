@@ -237,7 +237,7 @@ Resources:
   ControlPlane:
     Type: AWS::EKS::Cluster
     Properties:
-      Name: !Sub '${AWS::StackName}-${EKSClusterName}'
+      Name: !Sub '${EKSClusterName}'
       Version: "1.22"
       RoleArn: !GetAtt ControlPlaneRole.Arn
       ResourcesVpcConfig:

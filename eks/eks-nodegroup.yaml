@@ -64,6 +64,16 @@ Parameters:
     Type: "AWS::EC2::VPC::Id"
     Description: The VPC of the worker instances
 
+  NodeImageId:
+    Type: String
+    Default: ""
+    Description: (Optional) Specify your own custom image ID. This value overrides any AWS Systems Manager Parameter Store value specified above.
+
+  NodeImageIdSSMParam:
+    Type: "AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>"
+    Default: /aws/service/eks/optimized-ami/1.22/amazon-linux-2/recommended/image_id
+    Description: AWS Systems Manager Parameter Store parameter of the AMI ID for the worker node instances. Change this value to match the version of Kubernetes you are using.
+
 Mappings:
   # IDs of the "EKS-optimised AMIs" for the worker nodes:
   # https://docs.aws.amazon.com/eks/latest/userguide/eks-optimized-ami.html
