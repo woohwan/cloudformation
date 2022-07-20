@@ -222,7 +222,7 @@ Outputs:
         'Fn::Sub': '${AWS::StackName}-PrivateSubnetIds'
 
   VpcId:
-    Description: VPC for EKS
+    Description: VPC for cusmtom managed eks
     Value: !Ref VPC
     Export:
       Name:
