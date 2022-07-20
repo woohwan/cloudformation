@@ -1,0 +1,153 @@
+---
+AWSTemplateFormatVersion: 2010-09-09
+Description: EKS Managed Nodes
+
+Mappings:
+  ServicePrincipalPartitionmap:
+    aws:
+      EC2: ec2.amazonaws.com
+      EKS: eks.amazonaws.com
+
+Parameters:
+  VpcId:
+    Type: "AWS::EC2::VPC::Id"
+    Description: The VPC of the worker instances
+
+  ClusterName:
+    Type: String
+    Description: Name of k8s cluster
+    Default: dev
+
+  ControlPlaneSecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+    Description: Security Group for Control Plane
+  
+  KeyPairName:
+    Type: String
+    Description: Name of an existing EC2 key pair (for SSH access to the worker node instance)
+    Default: aws-ec2
+
+  NodeGroupName:
+    Type: String
+    Description: Unique identifier for the Node Group.
+  
+  Subnets:
+    Type: "List<AWS::EC2::Subnet::Id>"
+    Description: The subnets where workers can be created.
+
+  NodeVolumeSize:
+    Type: Number
+    Default: 20
+    Description: Node volume size
+
+  NodeAutoScalingGroupDesiredCapacity:
+    Type: Number
+    Default: 2
+    Description: Desired capacity of Node Group ASG.
+
+  NodeAutoScalingGroupMaxSize:
+    Type: Number
+    Default: 3
+    Description: Maximum size of Node Group ASG. Set to at least 1 greater than NodeAutoScalingGroupDesiredCapacity.
+
+  NodeAutoScalingGroupMinSize:
+    Type: Number
+    Default: 1
+    Description: Minimum size of Node Group ASG.
+  
+  NodeInstanceType:
+    Type: String
+    Default: t3.medium
+
+  NodeImageIdSSMParam:
+    Type: "AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>"
+    Default: /aws/service/eks/optimized-ami/1.22/amazon-linux-2/recommended/image_id
+    Description: AWS Systems Manager Parameter Store parameter of the AMI ID for the worker node instances. Change this value to match the version of Kubernetes you are using.
+
+Resources:
+  LaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        BlockDeviceMappings:
+          - DeviceName: /dev/xvda
+            Ebs:
+              Iops: 3000
+              Throughtput: 125
+              VolumeSize: !Ref NodeVolumeSize
+              VolumeType: gp3
+        ImageId: !Ref NodeImageIdSSMParam
+        InstanceType: !Ref NodeInstanceType
+        KeyName: !Ref KeyPairName
+        MetadataOptions:
+          - HttpPutResponseHopLimit: 2
+          - HttpTokens: optional
+        SecurityGroupIds:
+          - !Ref ControlPlaneSecurityGroupId
+          - !Ref SSH
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: !Sub '${ClusterName}-${NodeGroupName}-Node'
+          - ResourceType: volume
+            Tags:
+              - Key: Name
+                Value: !Sub '${ClusterName}-${NodeGroupName}-Node'
+          - ResourceType: network-interface
+            Tags:
+              - Key: Name
+                Value: !Sub '${ClusterName}-${NodeGroupName}-Node'
+      LaunchTemplateName: !Sub '${AWS::StackName}'
+
+  ManagedNodeGroup:
+    Type: AWS::EKS::Nodegroup
+    Properties:
+      ClusterName: !Sub ${ClusterName}
+      InstanceTypes:
+        - t3.medium
+      LaunchTemplate:
+        Id: !Ref LaunchTemplate
+        Version: !GetAtt LaunchTemplate.LatestVersionNumber
+      NodeRole: !GetAtt NodeInstanceRole.Arn
+      NodegroupName: !Ref NodeGroupName
+      ScalingConfig:
+        DesiredSize: !Ref NodeAutoScalingGroupDesiredCapacity
+        MaxSize: !Ref NodeAutoScalingGroupMaxSize
+        MinSize: !Ref NodeAutoScalingGroupMinSize
+      Subnets: !Ref Subnets
+
+  NodeInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}/NodeInstanceRole"
+  SSH:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Allow SSH access" # Required
+      GroupName: !Sub '${AWS::StackName}-remoteAccess'
+      SecurityGroupIngress:
+        - CidrIp: 0.0.0.0/0
+          Description: "Allow SSH access to managed worker nodes in group"
+          IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}/SSH"
+      VpcId: !Ref VpcId

@@ -1,5 +1,8 @@
 {
   "yaml.schemas": {
-    "cloudformation://schema/cloudformation": "file:///c%3A/workspace/aws/cloudformation/eks/eks-cluster.yaml"
+    "cloudformation://schema/cloudformation": [
+      "file:///c%3A/workspace/aws/cloudformation/eks/eks-cluster.yaml"
+    ],
+    "https://raw.githubusercontent.com/awslabs/goformation/master/schema/cloudformation.schema.json": "file:///c%3A/workspace/aws/cloudformation/eks/eksctl/eks-managed-nodegroup.yaml"
   }
 }
