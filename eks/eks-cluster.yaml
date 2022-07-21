@@ -7,17 +7,28 @@ Description: EKS cluster using a VPC with two private subnets
 
 Parameters:
 
+  VpcStackName:
+    Type: String
+    Default: eks-vpc
+
   ClusterName:
     Type: String
     Description: Name of k8s cluster
     Default: dev
 
-  KeyPairName:
-    Type: String
-    Description: Name of an existing EC2 key pair (for SSH access to the worker node instance)
-    Default: aws-ec2
-
 Resources:
+
+  ClusterSharedNodeSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Communication between all nodes in the cluster # Required
+      Tags:
+        - Key: Name
+          Value: 
+            Fn::Sub: ${AWS::StackName}-ClusterSharedNodeSecurityGroup
+      VpcId: !ImportValue 
+        'Fn::Sub': '${VpcStackName}-VpcId'
+
 
 #==========================================================================================#
 # Control Plane
@@ -32,7 +43,14 @@ Resources:
         SecurityGroupIds:
           - !Ref ControlPlaneSecurityGroup
         SubnetIds:
-        - Fn::ImportValue 
+          'Fn::Split':
+            - ','
+            - Fn::ImportValue:
+                !Sub  '${VpcStackName}-PrivateSubnetIds'
+          # - !ImportValue 
+          #     'Fn::Sub': '${VpcStackName}-PrivateSubnet1'
+          # - !ImportValue 
+          #     'Fn::Sub': '${VpcStackName}-PrivateSubnet2'
 
   ControlPlaneRole:
     Type: AWS::IAM::Role
@@ -48,22 +66,119 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
         - arn:aws:iam::aws:policy/AmazonEKSServicePolicy
-      RoleName: !Sub '${AWS::StackName}-ControlPlaneRole'
+      Tags:
+        - Key: Name
+          Value: 
+            Fn::Sub: ${AWS::StackName}-ControlPlaneRole
 
 #==========================================================================================#
+#  Default ClusterSecurityGroup made. Inbound and Outbound: All
 # Control Plane Security Group
+# # Inbound: None, Outbound: All
 #==========================================================================================#
   ControlPlaneSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Security group for the elastic network interfaces between the control plane and the worker nodes
-      VpcId: !Ref VpcId
+      GroupDescription: Communication between the control plane and worker nodegroups
+      VpcId: !ImportValue 
+        'Fn::Sub': '${VpcStackName}-VpcId'
       Tags:
         - Key: Name
           Value: !Sub "${AWS::StackName}-ControlPlaneSecurityGroup"
 
 
+  IngressDefaultClusterToNodeSG:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: >-
+        Allow managed and unmanaged nodes to communiate with each other (all ports)
+      FromPort: 0
+      GroupId:
+        Ref: ClusterSharedNodeSecurityGroup
+      IpProtocol: '-1' # Required
+      SourceSecurityGroupId:
+        Fn::GetAtt:
+          - ControlPlane
+          - ClusterSecurityGroupId
+      ToPort: 65535
+  
+  IngressInterNodeGroupSG:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allow nodes to communicate with each other (all ports)
+      FromPort: 0
+      GroupId:
+        Ref: ClusterSharedNodeSecurityGroup
+      IpProtocol: '-1' # Required
+      SourceSecurityGroupId:
+        Ref: ClusterSharedNodeSecurityGroup
+      ToPort: 65535
+
+  IngressNodeToDefaultClusterSG:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allow unmanaged nodes to communicate with control plane (all ports)
+      FromPort: 0
+      GroupId:
+        Fn::GetAtt:
+          - ControlPlane
+          - ClusterSecurityGroupId
+      IpProtocol: -1 # Required
+      SourceSecurityGroupId:
+        Ref: ClusterSharedNodeSecurityGroup
+      ToPort: 65535
+
 Outputs:
+  
+  ARN:
+    Description: EKS Control Plane Arn
+    Value:
+      Fn::GetAtt:
+        - ControlPlane
+        - Arn
+
+  ClusterSecurityGroupId:
+    Value:
+      Fn::GetAtt:
+        - ControlPlane
+        - ClusterSecurityGroupId
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}::ClusterSecurityGroupId
+
+  ClusterStackName:
+    Value:
+      Ref: AWS::StackName
+  Endpoint:
+    Value:
+      Fn::GetAtt:
+        - ControlPlane
+        - Endpoint
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}::Endpoint
+
   ControlPlaneSecurityGroupId:
     Description: Security group for the cluster control plane communication with worker nodes
-    Value: !GetAtt ControlPlaneSecurityGroup.GroupId
+    Value: !Ref ControlPlaneSecurityGroup
+    Export:
+      Name: 
+        'Fn::Sub': '${AWS::StackName}-ControlPlaneSecurityGroupId'
+
+  ControlPlaneRoleARN:
+    Value:
+      Fn::GetAtt:
+        - ControlPlaneRole
+        - Arn
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}::ControlPlaneRoleARN
+  
+  SharedNodeSecurityGroup:
+    Value:
+      Ref: ClusterSharedNodeSecurityGroup
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}::SharedNodeSecurityGroup
+
+  
