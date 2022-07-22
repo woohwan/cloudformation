@@ -9,19 +9,19 @@ Mappings:
       EKS: eks.amazonaws.com
 
 Parameters:
-  VpcId:
-    Type: "AWS::EC2::VPC::Id"
-    Description: The VPC of the worker instances
+  VpcStackName:
+    Type: String
+    Default: eks-vpc
+
+  ClusterStackName:
+    Type: String
+    Default: eks-cluster
 
   ClusterName:
     Type: String
     Description: Name of k8s cluster
     Default: dev
 
-  ControlPlaneSecurityGroupId:
-    Type: AWS::EC2::SecurityGroup::Id
-    Description: Security Group for Control Plane
-  
   KeyPairName:
     Type: String
     Description: Name of an existing EC2 key pair (for SSH access to the worker node instance)
@@ -30,14 +30,11 @@ Parameters:
   NodeGroupName:
     Type: String
     Description: Unique identifier for the Node Group.
-  
-  Subnets:
-    Type: "List<AWS::EC2::Subnet::Id>"
-    Description: The subnets where workers can be created.
+    Default: nodegrp1
 
   NodeVolumeSize:
     Type: Number
-    Default: 20
+    Default: 80
     Description: Node volume size
 
   NodeAutoScalingGroupDesiredCapacity:
@@ -66,19 +63,6 @@ Parameters:
 
 Resources:
 
-  Node:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: "String" # Required
-      GroupName: "String"
-      SecurityGroupEgress:
-        SecurityGroupEgress
-      SecurityGroupIngress:
-        SecurityGroupIngress
-      Tags:
-        Tags
-      VpcId: "String"
-
   LaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
     Properties:
@@ -87,17 +71,18 @@ Resources:
           - DeviceName: /dev/xvda
             Ebs:
               Iops: 3000
-              Throughtput: 125
+              # Throughput: 125
               VolumeSize: !Ref NodeVolumeSize
               VolumeType: gp3
         ImageId: !Ref NodeImageIdSSMParam
-        InstanceType: !Ref NodeInstanceType
+        # InstanceType: !Ref NodeInstanceType
         KeyName: !Ref KeyPairName
         MetadataOptions:
-          - HttpPutResponseHopLimit: 2
-          - HttpTokens: optional
+          HttpPutResponseHopLimit: 2
+          HttpTokens: optional
         SecurityGroupIds:
-          - !Ref ControlPlaneSecurityGroupId
+          - Fn::ImportValue: 
+              Fn::Sub: ${ClusterStackName}-ClusterSecurityGroupId
           - !Ref SSH
         TagSpecifications:
           - ResourceType: instance
@@ -119,7 +104,7 @@ Resources:
     Properties:
       ClusterName: !Sub ${ClusterName}
       InstanceTypes:
-        - t3.medium
+        - !Ref NodeInstanceType
       LaunchTemplate:
         Id: !Ref LaunchTemplate
         Version: !GetAtt LaunchTemplate.LatestVersionNumber
@@ -129,7 +114,11 @@ Resources:
         DesiredSize: !Ref NodeAutoScalingGroupDesiredCapacity
         MaxSize: !Ref NodeAutoScalingGroupMaxSize
         MinSize: !Ref NodeAutoScalingGroupMinSize
-      Subnets: !Ref Subnets
+      Subnets:
+        'Fn::Split':
+            - ','
+            - Fn::ImportValue:
+                !Sub  '${VpcStackName}-PrivateSubnetIds'
 
   NodeInstanceRole:
     Type: AWS::IAM::Role
@@ -145,6 +134,7 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
         - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy    # rights about vpc-cni
         - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
       Tags:
         - Key: Name
