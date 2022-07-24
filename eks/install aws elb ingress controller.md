@@ -16,10 +16,17 @@ eksctl create iamserviceaccount \
   --name=aws-load-balancer-controller \
   --role-name "AmazonEKSLoadBalancerControllerRole" \
   --attach-policy-arn=arn:aws:iam::${AccountId}:policy/AWSLoadBalancerControllerIAMPolicy \
+  --override-existing-serviceaccounts \
+  --region ap-northeast-2 \
   --approve
 
 aws eks update-kubeconfig --name dev --region ap-northeast-2
 
+helm repo add eks https://aws.github.io/eks-charts
+
+helm repo update
+
+kubectl apply -k "github.com/aws/eks-charts/stable/aws-load-balancer-controller//crds?ref=master"
 
 helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
   -n kube-system \
@@ -29,4 +36,6 @@ helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
   --set region=ap-northeast-2 \
   --set vpcId=vpc-00bcc62f7608a51a7
 
+
+kubectl logs -n kube-system   deployment.apps/aws-load-balancer-controller
 ```

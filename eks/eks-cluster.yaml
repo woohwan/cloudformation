@@ -47,10 +47,23 @@ Resources:
             - ','
             - Fn::ImportValue:
                 !Sub  '${VpcStackName}-PrivateSubnetIds'
-          # - !ImportValue 
-          #     'Fn::Sub': '${VpcStackName}-PrivateSubnet1'
-          # - !ImportValue 
-          #     'Fn::Sub': '${VpcStackName}-PrivateSubnet2'
+
+  PolicyELBPermissions:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyDocument:
+        Statement:
+          - Action:
+              - ec2:DescribeAccountAttributes
+              - ec2:DescribeAddresses
+              - ec2:DescribeInternetGateways
+            Effect: Allow
+            Resource: '*'
+        Version: '2012-10-17'
+      PolicyName:
+        Fn::Sub: ${AWS::StackName}-PolicyELBPermissions
+      Roles:
+        - Ref: ControlPlaneRole
 
   ControlPlaneRole:
     Type: AWS::IAM::Role
@@ -85,34 +98,6 @@ Resources:
           Value: True
         - Key: created_by
           Value: steve
-
-  # CoreDns:
-  #   Type: AWS::EKS::Addon
-  #   DependsOn: ControlPlane
-  #   Properties:
-  #     AddonName: "coredns" # Required
-  #     AddonVersion: "v1.8.7-eksbuild.1"
-  #     ClusterName: !Sub ${ClusterName} # Required
-  #     ResolveConflicts: OVERWRITE
-  #     Tags:
-  #       - Key: eks-addon
-  #         Value: True
-  #       - Key: created_by
-  #         Value: steve
-
-  # KubeProxy:
-  #   Type: AWS::EKS::Addon
-  #   DependsOn: ControlPlane
-  #   Properties:
-  #     AddonName: "kube-proxy" # Required
-  #     AddonVersion: "v1.22.6-eksbuild.1"
-  #     ClusterName: !Sub ${ClusterName} # Required
-  #     ResolveConflicts: OVERWRITE
-  #     Tags:
-  #       - Key: eks-addon
-  #         Value: True
-  #       - Key: created_by
-  #         Value: steve
 
 #==========================================================================================#
 #  Default ClusterSecurityGroup made. Inbound and Outbound: All
