@@ -56,12 +56,45 @@ Parameters:
     Type: String
     Default: t3.medium
 
+  NodeImageId:
+    Type: String
+    Default: ""
+    Description: (Optional) Specify your own custom image ID. This value overrides any AWS Systems Manager Parameter Store value specified above.
+    
   NodeImageIdSSMParam:
     Type: "AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>"
     Default: /aws/service/eks/optimized-ami/1.22/amazon-linux-2/recommended/image_id
     Description: AWS Systems Manager Parameter Store parameter of the AMI ID for the worker node instances. Change this value to match the version of Kubernetes you are using.
 
 Resources:
+
+  CoreDns:
+    Type: AWS::EKS::Addon
+    DependsOn: ManagedNodeGroup
+    Properties:
+      AddonName: "coredns" # Required
+      AddonVersion: "v1.8.7-eksbuild.1"
+      ClusterName: !Sub ${ClusterName} # Required
+      ResolveConflicts: OVERWRITE
+      Tags:
+        - Key: eks-addon
+          Value: True
+        - Key: created_by
+          Value: steve
+
+  KubeProxy:
+    Type: AWS::EKS::Addon
+    DependsOn: ManagedNodeGroup
+    Properties:
+      AddonName: "kube-proxy" # Required
+      AddonVersion: "v1.22.6-eksbuild.1"
+      ClusterName: !Sub ${ClusterName} # Required
+      ResolveConflicts: OVERWRITE
+      Tags:
+        - Key: eks-addon
+          Value: True
+        - Key: created_by
+          Value: steve
 
   LaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
@@ -74,7 +107,7 @@ Resources:
               # Throughput: 125
               VolumeSize: !Ref NodeVolumeSize
               VolumeType: gp3
-        ImageId: !Ref NodeImageIdSSMParam
+        # ImageId: !Ref NodeImageIdSSMParam
         # InstanceType: !Ref NodeInstanceType
         KeyName: !Ref KeyPairName
         MetadataOptions:
@@ -102,6 +135,7 @@ Resources:
   ManagedNodeGroup:
     Type: AWS::EKS::Nodegroup
     Properties:
+      AmiType: AL2_x86_64
       ClusterName: !Sub ${ClusterName}
       InstanceTypes:
         - !Ref NodeInstanceType

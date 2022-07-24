@@ -66,6 +66,7 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
         - arn:aws:iam::aws:policy/AmazonEKSServicePolicy
+        - arn:aws:iam::aws:policy/AmazonEKSVPCResourceController
       Tags:
         - Key: Name
           Value: 
@@ -84,6 +85,34 @@ Resources:
           Value: True
         - Key: created_by
           Value: steve
+
+  # CoreDns:
+  #   Type: AWS::EKS::Addon
+  #   DependsOn: ControlPlane
+  #   Properties:
+  #     AddonName: "coredns" # Required
+  #     AddonVersion: "v1.8.7-eksbuild.1"
+  #     ClusterName: !Sub ${ClusterName} # Required
+  #     ResolveConflicts: OVERWRITE
+  #     Tags:
+  #       - Key: eks-addon
+  #         Value: True
+  #       - Key: created_by
+  #         Value: steve
+
+  # KubeProxy:
+  #   Type: AWS::EKS::Addon
+  #   DependsOn: ControlPlane
+  #   Properties:
+  #     AddonName: "kube-proxy" # Required
+  #     AddonVersion: "v1.22.6-eksbuild.1"
+  #     ClusterName: !Sub ${ClusterName} # Required
+  #     ResolveConflicts: OVERWRITE
+  #     Tags:
+  #       - Key: eks-addon
+  #         Value: True
+  #       - Key: created_by
+  #         Value: steve
 
 #==========================================================================================#
 #  Default ClusterSecurityGroup made. Inbound and Outbound: All
@@ -107,7 +136,7 @@ Resources:
       Description: >-
         Allow managed and unmanaged nodes to communiate with each other (all ports)
       FromPort: 0
-      GroupId:
+      GroupId: 
         Ref: ClusterSharedNodeSecurityGroup
       IpProtocol: '-1' # Required
       SourceSecurityGroupId:
