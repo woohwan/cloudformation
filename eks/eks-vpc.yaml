@@ -50,7 +50,6 @@ Resources:
           Value: !Sub "${AWS::StackName}-PublicSubnet1"
         - Key: kubernetes.io.role/elb
           Value: 1
-        # optional after eks v1.19
         - Key: !Sub "kubernetes.io/cluster/${ClusterName}" 
           Value: shared
   
@@ -65,7 +64,6 @@ Resources:
           Value: !Sub "${AWS::StackName}-PublicSubnet2"
         - Key: kubernetes.io.role/elb
           Value: 1
-        # optional after eks v1.19
         - Key: !Sub "kubernetes.io/cluster/${ClusterName}" 
           Value: shared
   
@@ -80,7 +78,6 @@ Resources:
           Value: !Sub "${AWS::StackName}-PrivateSubnet1"
         - Key: kubernetes.io/role/internal-elb
           Value: 1
-        # optional after eks v1.19
         - Key: !Sub "kubernetes.io/cluster/${ClusterName}" 
           Value: shared
   
@@ -93,9 +90,8 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub "${AWS::StackName}-PrivateSubnet2"
-        - Key: kubernetes.io/role/insternal-elb
+        - Key: kubernetes.io/role/internal-elb
           Value: 1
-        # optional after eks v1.19
         - Key: !Sub "kubernetes.io/cluster/${ClusterName}" 
           Value: shared
 
