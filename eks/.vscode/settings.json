@@ -1,33 +1,49 @@
 {
-    // "yaml.schemas": {
-    //     "https://raw.githubusercontent.com/awslabs/goformation/master/schema/cloudformation.schema.json": [
-    //         "file:///Users/whpark/workspace/cloudformation/eks/test.yaml",
-    //         "file:///Users/whpark/workspace/cloudformation/eks/eks-cluster.yaml",
-    //         "file:///Users/whpark/workspace/cloudformation/eks/eks-managed-nodegroup.yaml",
-    //         "file:///Users/whpark/workspace/cloudformation/eks/eksctl/eksctl-eksctl-dev-addon-iamserviceaccount-alb.yaml"
-    //     ]
-    // },
-    // Custom tags for the parser to use
-    // "yaml.customTags": [
-    //     "!And",
-    //     "!If",
-    //     "!Not",
-    //     "!Equals",
-    //     "!Or",
-    //     "!FindInMap sequence",
-    //     "!Base64",
-    //     "!Cidr",
-    //     "!Ref",
-    //     "!Sub",
-    //     "!GetAtt",
-    //     "!GetAZs",
-    //     "!ImportValue",
-    //     "!Select",
-    //     "!Select sequence",
-    //     "!Split",
-    //     "!Join sequence",
-    //     "Fn::ImportValue"
-    // ],
-    // Enable/disable default YAML formatter (requires restart)
-    "yaml.format.enable": true,
+    {
+        "[yaml]": {
+            "editor.insertSpaces": true,
+            "editor.tabSize": 2,
+            "editor.quickSuggestions": {
+                "other": true,
+                "comments": false,
+                "strings": true
+            },
+            "editor.autoIndent": true
+        },
+        "editor.renderWhitespace": "all",
+        "editor.tabSize": 2,
+        "editor.autoIndent": true,
+        "yaml.format.enable": true,
+        "yaml.trace.server": "verbose",
+        "yaml.customTags": [
+            "!And",
+            "!If",
+            "!Not",
+            "!Equals",
+            "!Or",
+            "!FindInMap",
+            "!Base64",
+            "!Cidr",
+            "!Ref",
+            "!Sub",
+            "!GetAtt",
+            "!GetAZs",
+            "!ImportValue",
+            "!Select",
+            "!Split",
+            "!Join"
+        ],
+        "json.schemas": [
+            {
+                "fileMatch": [
+                    "*-template.json"
+                ],
+                "url": "https://s3.amazonaws.com/cfn-resource-specifications-us-east-1-prod/schemas/2.15.0/all-spec.json"
+            }
+        ],
+        "yaml.schemas": {
+            "https://s3.amazonaws.com/cfn-resource-specifications-us-east-1-prod/schemas/2.15.0/all-spec.json": "*-template.yaml"
+        }
+    }
+    "python.defaultInterpreterPath": "/Users/whpark/opt/anaconda3/envs/py-aws/bin/python",
 }
