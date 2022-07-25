@@ -1,33 +1,33 @@
 {
-    "yaml.schemas": {
-        "https://raw.githubusercontent.com/awslabs/goformation/master/schema/cloudformation.schema.json": [
-            "file:///Users/whpark/workspace/cloudformation/eks/test.yaml",
-            "file:///Users/whpark/workspace/cloudformation/eks/eks-cluster.yaml",
-            "file:///Users/whpark/workspace/cloudformation/eks/eks-managed-nodegroup.yaml",
-            "file:///Users/whpark/workspace/cloudformation/eks/eksctl/eksctl-eksctl-dev-addon-iamserviceaccount-alb.yaml"
-        ]
-    },
+    // "yaml.schemas": {
+    //     "https://raw.githubusercontent.com/awslabs/goformation/master/schema/cloudformation.schema.json": [
+    //         "file:///Users/whpark/workspace/cloudformation/eks/test.yaml",
+    //         "file:///Users/whpark/workspace/cloudformation/eks/eks-cluster.yaml",
+    //         "file:///Users/whpark/workspace/cloudformation/eks/eks-managed-nodegroup.yaml",
+    //         "file:///Users/whpark/workspace/cloudformation/eks/eksctl/eksctl-eksctl-dev-addon-iamserviceaccount-alb.yaml"
+    //     ]
+    // },
     // Custom tags for the parser to use
-    "yaml.customTags": [
-        "!And",
-        "!If",
-        "!Not",
-        "!Equals",
-        "!Or",
-        "!FindInMap sequence",
-        "!Base64",
-        "!Cidr",
-        "!Ref",
-        "!Sub",
-        "!GetAtt",
-        "!GetAZs",
-        "!ImportValue",
-        "!Select",
-        "!Select sequence",
-        "!Split",
-        "!Join sequence",
-        "Fn::ImportValue"
-    ],
+    // "yaml.customTags": [
+    //     "!And",
+    //     "!If",
+    //     "!Not",
+    //     "!Equals",
+    //     "!Or",
+    //     "!FindInMap sequence",
+    //     "!Base64",
+    //     "!Cidr",
+    //     "!Ref",
+    //     "!Sub",
+    //     "!GetAtt",
+    //     "!GetAZs",
+    //     "!ImportValue",
+    //     "!Select",
+    //     "!Select sequence",
+    //     "!Split",
+    //     "!Join sequence",
+    //     "Fn::ImportValue"
+    // ],
     // Enable/disable default YAML formatter (requires restart)
     "yaml.format.enable": true,
 }

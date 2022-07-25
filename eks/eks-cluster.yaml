@@ -46,7 +46,7 @@ Resources:
           'Fn::Split':
             - ','
             - Fn::ImportValue:
-                !Sub  '${VpcStackName}-PrivateSubnetIds'
+                !Sub  '${VpcStackName}-SubnetIds'
 
   PolicyELBPermissions:
     Type: AWS::IAM::Policy
