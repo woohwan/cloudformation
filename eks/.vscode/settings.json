@@ -1,48 +1,8 @@
 {
-    {
-        "[yaml]": {
-            "editor.insertSpaces": true,
-            "editor.tabSize": 2,
-            "editor.quickSuggestions": {
-                "other": true,
-                "comments": false,
-                "strings": true
-            },
-            "editor.autoIndent": true
-        },
-        "editor.renderWhitespace": "all",
-        "editor.tabSize": 2,
-        "editor.autoIndent": true,
-        "yaml.format.enable": true,
-        "yaml.trace.server": "verbose",
-        "yaml.customTags": [
-            "!And",
-            "!If",
-            "!Not",
-            "!Equals",
-            "!Or",
-            "!FindInMap",
-            "!Base64",
-            "!Cidr",
-            "!Ref",
-            "!Sub",
-            "!GetAtt",
-            "!GetAZs",
-            "!ImportValue",
-            "!Select",
-            "!Split",
-            "!Join"
-        ],
-        "json.schemas": [
-            {
-                "fileMatch": [
-                    "*-template.json"
-                ],
-                "url": "https://s3.amazonaws.com/cfn-resource-specifications-us-east-1-prod/schemas/2.15.0/all-spec.json"
-            }
-        ],
-        "yaml.schemas": {
-            "https://s3.amazonaws.com/cfn-resource-specifications-us-east-1-prod/schemas/2.15.0/all-spec.json": "*-template.yaml"
-        }
-    },
+  "yaml.schemas": {
+    "https://s3.amazonaws.com/cfn-resource-specifications-us-east-1-prod/schemas/2.15.0/all-spec.json": [
+      "*-template.yaml",
+      "file:///c%3A/workspace/aws/cloudformation/eks/eks-cluster.yaml",
+    ]
+  }
 }
